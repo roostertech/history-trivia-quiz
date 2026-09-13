@@ -1,0 +1,922 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>History Trivia Quiz</title>
+<style>
+  :root{
+    --bg:#1e2836; --card:#ffffff; --ink:#22303f; --muted:#5b6b7c;
+    --accent:#e4572e; --accent-dark:#c7431f; --teal:#0f9b8e; --amber:#f6ae2d;
+    --wrong:#d64545; --line:#e3e8ee;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Hiragino Maru Gothic ProN","Trebuchet MS",Verdana,system-ui,sans-serif;
+    min-height:100vh; display:flex; flex-direction:column; align-items:center;
+  }
+  header.topbar{
+    width:min(760px,94vw); display:flex; align-items:center; gap:12px;
+    padding:18px 4px 10px; color:#fff;
+  }
+  header.topbar h1{font-size:26px; margin:0; letter-spacing:.5px}
+  header.topbar h1 .dot{color:var(--amber)}
+  .stats{margin-left:auto; display:flex; gap:8px}
+  .stat{background:#2b3a4f; border-radius:10px; padding:6px 12px; text-align:center; min-width:74px}
+  .stat b{display:block; font-size:18px}
+  .stat span{font-size:11px; color:#aeb9c6}
+  .controls{width:min(760px,94vw); display:flex; gap:10px; padding:4px 4px 12px}
+  select#weekFilter, select#countSelect, button#restartBtn, button#soundBtn, button#musicBtn{
+    font:inherit; border-radius:12px; border:2px solid #31435a; padding:8px 12px;
+    background:#2b3a4f; color:#fff;
+  }
+  button#restartBtn, button#soundBtn, button#musicBtn{cursor:pointer; border-radius:999px}
+  button#restartBtn:hover, button#soundBtn:hover, button#musicBtn:hover{background:#3a4f6a}
+  main.card{
+    width:min(760px,94vw); background:var(--card); border-radius:18px; position:relative;
+    padding:26px 26px 22px; box-shadow:0 12px 30px rgba(0,0,0,.35);
+  }
+  .buddy{position:absolute; right:14px; top:12px; width:86px; height:auto; pointer-events:none}
+  #buddyGrin,#buddyFrown,#buddyMad{display:none}
+  .buddy[data-mood="happy"] #buddySmile{display:none}
+  .buddy[data-mood="happy"] #buddyGrin{display:block}
+  .buddy[data-mood="sad"] #buddySmile,.buddy[data-mood="angry"] #buddySmile{display:none}
+  .buddy[data-mood="sad"] #buddyFrown,.buddy[data-mood="angry"] #buddyFrown{display:block}
+  .buddy[data-mood="angry"] #buddyMad{display:block}
+  #buddyPupils{transition:transform .07s linear}
+  .buddy.hop{animation:buddy-hop .45s ease}
+  @keyframes buddy-hop{0%{transform:translateY(0)}40%{transform:translateY(-14px) scale(1.05)}100%{transform:translateY(0)}}
+  .blab{display:none; position:absolute; right:108px; top:22px; width:200px; background:#fffbe8;
+    border:2px solid #4a3200; border-radius:12px; padding:8px 12px; font-size:13px; z-index:5}
+  .blab small{color:var(--muted)}
+  .blab.show{display:block; animation:blab-pop .3s ease}
+  @keyframes blab-pop{0%{opacity:0; transform:scale(.7) translateY(6px)}100%{opacity:1; transform:none}}
+  @media (prefers-reduced-motion: reduce){
+    .buddy.hop, #furyStat.max b{animation:none}
+  }
+  /* ---- fury meter: consecutive misses, resets on correct ---- */
+  #furyStat.low b{color:var(--amber)}
+  #furyStat.med b{color:#e8852e}
+  #furyStat.high b{color:#e4572e}
+  #furyStat.max b{color:#ff3b30; animation:fury-blaze .5s ease infinite}
+  @keyframes fury-blaze{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}
+  .pills{display:flex; gap:8px; margin-bottom:6px}
+  .pill{font-size:12px; font-weight:bold; border-radius:999px; padding:4px 12px; background:#eef2f6; color:var(--muted)}
+  .pill.week{background:var(--amber); color:#4a3200}
+  .word{font-size:24px; line-height:1.35; margin:8px 0 2px; letter-spacing:.2px; padding-right:100px}
+  .prompt{padding-right:100px}
+  .prompt{color:var(--muted); margin:0 0 16px}
+  .progress{height:8px; background:var(--line); border-radius:99px; overflow:hidden; margin-bottom:16px}
+  .progress i{display:block; height:100%; background:var(--teal); width:0%}
+  .options{display:grid; gap:10px}
+  .opt{
+    display:flex; gap:12px; align-items:flex-start; text-align:left; cursor:pointer;
+    font:inherit; font-size:16px; background:#f6f8fa; color:var(--ink);
+    border:3px solid transparent; border-radius:12px; padding:12px 14px;
+  }
+  .opt:hover{border-color:var(--amber); background:#fff8e8}
+  .opt .letter{
+    flex:none; width:28px; height:28px; border-radius:8px; background:var(--ink);
+    color:#fff; font-weight:bold; display:flex; align-items:center; justify-content:center;
+  }
+  .opt.correct{border-color:var(--teal); background:#e2f5f1}
+  .opt.picked-wrong{border-color:var(--wrong); background:#fbe4e4}
+  .opt:disabled{cursor:default}
+  .options.answered{opacity:.5}
+  .options.answered .opt{pointer-events:none; filter:grayscale(.4)}
+  footer.hint{color:#8fa0b3; font-size:13px; padding:14px 0 26px; width:min(760px,94vw)}
+  /* ---- feedback overlay ---- */
+  .overlay{position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:20}
+  .overlay.show{display:flex}
+  .overlay.happy{background:rgba(246,174,45,.28)}
+  .overlay.sad{background:rgba(178,44,44,.40)}
+  .panel{
+    position:relative; width:min(480px,92vw); background:#fff; text-align:center;
+    border-radius:22px 22px 26px 26px; padding:30px 26px 24px; overflow:hidden;
+    box-shadow:0 18px 50px rgba(0,0,0,.4);
+  }
+  .overlay.sad .panel{border-top:10px solid #5b84ad; animation:sad-shake .5s ease}
+  .overlay.happy .panel{border-top:10px solid var(--amber)}
+  .face{font-size:64px; line-height:1; margin:0 0 6px; font-weight:bold}
+  .overlay.happy .face{color:var(--accent); opacity:0}
+  .overlay.happy.go .face{animation:happy-pop .55s cubic-bezier(.2,1.6,.4,1) forwards}
+  .overlay.sad .face{color:#3d5a80}
+  .verdict{font-size:30px; margin:4px 0}
+  .detail{color:var(--muted); font-size:15px; margin:6px 0 4px}
+  .detail b{color:var(--ink)}
+  .trapnote{display:inline-block; margin-top:8px; font-size:13px; font-weight:bold;
+    background:#4a3200; color:var(--amber); border-radius:999px; padding:4px 12px}
+  #nextBtn{
+    margin-top:16px; font:inherit; font-size:17px; font-weight:bold; cursor:pointer;
+    background:var(--accent); color:#fff; border:0; border-radius:14px; padding:12px 34px;
+  }
+  #nextBtn:hover{background:var(--accent-dark)}
+  .sparkle{position:absolute; font-size:22px; color:var(--amber); opacity:0; pointer-events:none}
+  .overlay.happy.go .sparkle{animation:sparkle-pop .9s ease-out forwards}
+  .confetti{position:absolute; top:-14px; width:10px; height:16px; border-radius:3px; opacity:0; pointer-events:none}
+  .overlay.happy.go .confetti{animation:confetti-fall 1.4s ease-in forwards}
+  .tear{position:absolute; top:86px; width:12px; height:18px; border-radius:0 50% 50% 50%;
+    background:#5b9bd5; transform:rotate(45deg); opacity:0; pointer-events:none}
+  .overlay.sad.go .tear{animation:tear-fall 1.1s ease-in forwards}
+  .rain{position:absolute; top:-10px; width:3px; height:22px; background:#9fc3e5; opacity:0}
+  .overlay.sad.go .rain{animation:confetti-fall 1.2s linear forwards}
+  @keyframes happy-pop{0%{opacity:0; transform:scale(.2) rotate(-10deg)}70%{opacity:1; transform:scale(1.25) rotate(4deg)}100%{opacity:1; transform:scale(1)}}
+  @keyframes sparkle-pop{0%{opacity:0; transform:scale(.3)}40%{opacity:1}100%{opacity:0; transform:scale(1.4) translateY(-26px)}}
+  @keyframes confetti-fall{0%{opacity:1; transform:translateY(0) rotate(0)}100%{opacity:0; transform:translateY(340px) rotate(540deg)}}
+  @keyframes sad-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-10px)}40%{transform:translateX(9px)}60%{transform:translateX(-6px)}80%{transform:translateX(4px)}}
+  @keyframes tear-fall{0%{opacity:0; transform:rotate(45deg) translateY(0)}25%{opacity:1}100%{opacity:0; transform:rotate(45deg) translateY(120px)}}
+  /* ---- anime characters ---- */
+  .char-wrap{display:flex; gap:14px; align-items:center; text-align:left; margin-bottom:8px}
+  .char{width:148px; height:auto; flex:none}
+  .bubble{position:relative; background:#fff3d6; border:3px solid #4a3200; border-radius:14px;
+    padding:10px 14px; font-weight:bold; font-size:22px; color:var(--ink)}
+  .bubble small{display:block; font-weight:normal; font-size:14px; color:var(--muted); margin-top:4px}
+  .bubble:before{content:""; position:absolute; left:-13px; top:36px; border-width:8px 12px 8px 0;
+    border-style:solid; border-color:transparent #4a3200 transparent transparent}
+  .overlay.sad .bubble{background:#e8f1f8; border-color:#3d5a80}
+  .overlay.sad .bubble:before{border-color:transparent #3d5a80 transparent transparent}
+  .overlay.happy.go .char-happy{animation:char-bounce .8s ease infinite}
+  .overlay.sad.go .char-sad{animation:char-sway 1.4s ease-in-out infinite}
+  .tdrop{opacity:0}
+  .overlay.sad.go .tdrop{animation:tdrop-fall 1.2s ease-in infinite}
+  @keyframes char-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-14px)}}
+  /* ---- streak tiers: hotter streak, cooler celebration ---- */
+  .overlay.happy.go.tier-2 .panel{box-shadow:0 18px 50px rgba(0,0,0,.4), 0 0 45px rgba(246,174,45,.65)}
+  .overlay.happy.go.tier-3 .panel{box-shadow:0 18px 50px rgba(0,0,0,.4), 0 0 80px rgba(228,87,46,.8);
+    animation:panel-hype 1s ease-in-out infinite}
+  .overlay.happy.go.tier-2 .char-happy{animation:char-bounce2 .6s ease infinite}
+  .overlay.happy.go.tier-3 .char-happy{animation:char-flip 1s ease-in-out infinite}
+  .streak-banner{font-weight:bold; font-size:20px; color:#fff; background:#c7431f; border-radius:10px;
+    padding:6px 14px; margin-bottom:10px; letter-spacing:2px; animation:banner-drop .45s cubic-bezier(.2,2,.4,1)}
+  .aura{position:absolute; left:-12px; top:-24px; width:184px; height:184px; border-radius:50%;
+    background:radial-gradient(circle, rgba(246,174,45,.55), rgba(246,174,45,0) 70%);
+    animation:aura-pulse .8s ease-in-out infinite; pointer-events:none}
+  @keyframes char-bounce2{0%,100%{transform:translateY(0) rotate(-4deg)}50%{transform:translateY(-24px) rotate(4deg)}}
+  @keyframes char-flip{0%{transform:translateY(0) rotate(0)}50%{transform:translateY(-20px) rotate(180deg)}100%{transform:translateY(0) rotate(360deg)}}
+  @keyframes panel-hype{0%,100%{transform:scale(1)}50%{transform:scale(1.02)}}
+  @keyframes banner-drop{0%{opacity:0; transform:translateY(-30px) scale(1.3)}100%{opacity:1; transform:none}}
+  @keyframes aura-pulse{0%,100%{transform:scale(.9); opacity:.7}50%{transform:scale(1.15); opacity:1}}
+  /* ---- tier 4: 20+ mog form ---- */
+  .overlay.happy.go.tier-4 .panel{box-shadow:0 18px 50px rgba(0,0,0,.45), 0 0 100px rgba(246,196,69,.9);
+    animation:panel-hype .8s ease-in-out infinite}
+  .overlay.happy.go.tier-4 .char-mog{animation:mog-strut .8s ease-in-out infinite}
+  .overlay.happy.tier-4{animation:mog-pulse 1s ease infinite}
+  .tier-4 .confetti{animation-duration:.8s}
+  .tier-4 .aura{background:radial-gradient(circle, rgba(246,196,69,.7), rgba(246,196,69,0) 70%);
+    width:220px; height:220px; left:-32px; top:-42px}
+  .streak-banner.b4{background:#14141c; color:#f6c445; border:2px solid #f6c445}
+  @keyframes mog-strut{0%,100%{transform:translateX(-14px) rotate(-6deg)}50%{transform:translateX(14px) rotate(6deg)}}
+  @keyframes mog-pulse{0%,100%{background:rgba(246,174,45,.3)}50%{background:rgba(20,20,28,.55)}}
+  /* ---- relief: breaking the fury streak ---- */
+  .overlay.happy.go .char-relief{animation:relief-slump 1.6s ease forwards}
+  .overlay.go .sweat{animation:tdrop-fall 1.4s ease-in infinite}
+  @keyframes relief-slump{0%{transform:translateY(-10px)}60%{transform:translateY(6px)}100%{transform:translateY(0)}}
+  @media (prefers-reduced-motion: reduce){
+    .overlay .aura, .overlay .streak-banner, .overlay.happy.go .panel,
+    .overlay.happy.tier-4, .overlay .char-angry, .overlay .puff, .overlay .sweat{animation:none}
+  }
+  /* ---- learning: answer reveal + miss review ---- */
+  .answer-reveal{margin:10px 0 4px; background:#e2f5f1; border:3px solid var(--teal);
+    border-radius:12px; padding:10px 14px}
+  .answer-reveal span{display:block; font-size:12px; font-weight:bold; letter-spacing:1px; color:#0b6e65}
+  .answer-reveal b{display:block; font-size:19px; margin:2px 0}
+  .answer-reveal i{display:block; font-size:13px; color:var(--muted); margin-top:4px}
+  .miss-list{margin:12px 0 4px; background:#f6f8fa; border:2px solid var(--line); border-radius:12px;
+    padding:10px 14px; text-align:left; font-size:14px; max-height:160px; overflow:auto}
+  .miss-list span{font-size:12px; font-weight:bold; letter-spacing:1px; color:var(--muted)}
+  .miss-list div{margin-top:6px}
+  #retryBtn{margin-top:12px; margin-right:8px; font:inherit; font-size:16px; font-weight:bold; cursor:pointer;
+    background:#fff; color:#0b6e65; border:3px solid var(--teal); border-radius:14px; padding:10px 22px}
+  #retryBtn:hover{background:#e2f5f1}
+  @keyframes char-sway{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}
+  @keyframes tdrop-fall{0%{opacity:0; transform:translateY(0)}25%{opacity:1}100%{opacity:0; transform:translateY(22px)}}
+  .soot{position:absolute; bottom:-10px; width:7px; height:7px; background:#1a1a1a;
+    border-radius:50%; opacity:0; pointer-events:none}
+  .overlay.sad.go .soot{animation:soot-flicker 1.1s ease-out forwards}
+  @keyframes soot-flicker{0%{opacity:0; transform:translateY(0) scale(.6)}20%{opacity:1}40%{opacity:.3; transform:translateY(-40px) scale(1)}60%{opacity:.9; transform:translateY(-90px) scale(.8)}100%{opacity:0; transform:translateY(-160px) scale(1.1)}}
+  .char-wrap{position:relative}
+  .vortex{display:none; width:148px; height:150px; flex:none; position:relative}
+  .char-wrap.vanished .vortex{display:block}
+  .vortex:before,.vortex:after{content:""; position:absolute; border-radius:50%; border:7px solid transparent}
+  .vortex:before{left:24px; top:15px; width:100px; height:100px;
+    border-top-color:#e4572e; border-right-color:#e4572e; animation:vortex-spin .7s linear infinite}
+  .vortex:after{left:42px; top:33px; width:64px; height:64px;
+    border-bottom-color:#f6ae2d; border-left-color:#f6ae2d; animation:vortex-spin .5s linear infinite reverse}
+  .overlay.sad.go .char-wrap.vanished .char-sad, .overlay.sad.go .char-wrap.vanished .char-angry{position:absolute; left:0; top:10px; width:148px;
+    animation:trap-suck .8s ease-in forwards}
+  .overlay.sad.go .char-angry{animation:angry-tremble .3s linear infinite}
+  .overlay.sad.go .puff{animation:steam-rise 1s ease-out infinite}
+  @keyframes angry-tremble{0%,100%{transform:translate(0)}25%{transform:translate(-3px,2px)}75%{transform:translate(3px,-2px)}}
+  @keyframes steam-rise{0%{opacity:0; transform:translateY(8px)}30%{opacity:.9}100%{opacity:0; transform:translateY(-22px)}}
+  .trap-stamp{position:absolute; right:14px; top:14px; z-index:5; font-weight:bold; font-size:26px;
+    color:#c7431f; border:4px solid #c7431f; border-radius:8px; padding:4px 12px;
+    background:rgba(255,255,255,.88); animation:stamp-slam .4s cubic-bezier(.2,2.5,.4,1) forwards}
+  .overlay.sad.trap-flash{animation:trap-flash .9s ease}
+  .overlay.sad.trap-flash .panel{animation:trap-rattle .5s ease}
+  @keyframes trap-suck{0%{opacity:1; transform:scale(1) rotate(0)}30%{opacity:1; transform:scale(1.08) rotate(-8deg)}100%{opacity:0; transform:scale(0) rotate(720deg)}}
+  @keyframes vortex-spin{to{transform:rotate(360deg)}}
+  @keyframes stamp-slam{0%{opacity:0; transform:scale(3) rotate(10deg)}100%{opacity:1; transform:scale(1) rotate(-8deg)}}
+  @keyframes trap-flash{0%,100%{background:rgba(178,44,44,.40)}25%,60%{background:rgba(210,50,45,.60)}45%{background:rgba(178,44,44,.40)}}
+  @keyframes trap-rattle{0%,100%{transform:translate(0)}20%{transform:translate(-12px,4px) rotate(-1deg)}40%{transform:translate(10px,-5px) rotate(1deg)}60%{transform:translate(-8px,-3px)}80%{transform:translate(6px,3px)}}
+  @media (prefers-reduced-motion: reduce){
+    .overlay.sad .char-wrap.vanished .char-sad{position:static; width:148px; animation:none; opacity:0}
+    .overlay .vortex{display:none}
+    .overlay .trap-stamp, .overlay.sad.trap-flash, .overlay.sad.trap-flash .panel{animation:none}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .overlay.sad .panel, .overlay.happy.go .face, .overlay.happy.go .sparkle,
+    .overlay.happy.go .confetti, .overlay.sad.go .tear, .overlay.sad.go .rain,
+    .overlay .char, .overlay .tdrop, .overlay.sad.go .soot{animation:none; opacity:1}
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <h1>History Trivia Quiz<span class="dot">!</span></h1>
+  <div class="stats">
+    <div class="stat"><b id="score">0</b><span>score</span></div>
+    <div class="stat"><b id="streak">0</b><span>streak</span></div>
+    <div class="stat"><b id="qnum">–</b><span>question</span></div>
+    <div class="stat" id="furyStat"><b id="fury">0</b><span>fury</span></div>
+  </div>
+</header>
+<div class="controls">
+  <select id="weekFilter" aria-label="Choose question set">
+    <option value="all">Both lessons (40 questions)</option>
+    <option value="5">Topic 1 · Lesson 5: Winning Independence</option>
+    <option value="1">Topic 2 · Lesson 1: A Weak Confederation</option>
+  </select>
+  <select id="countSelect" aria-label="How many questions per round">
+    <option value="10">10 questions</option>
+    <option value="20">20 questions</option>
+    <option value="30">30 questions</option>
+    <option value="50">50 questions</option>
+    <option value="all" selected>All questions</option>
+  </select>
+  <button id="restartBtn" type="button">Restart</button>
+  <button id="soundBtn" type="button">Sound: on</button>
+  <button id="musicBtn" type="button">Music: on</button>
+</div>
+<main class="card">
+  <div class="pills"><span class="pill week" id="weekPill">Lesson</span><span class="pill" id="typePill">question</span></div>
+  <svg class="buddy" id="buddy" viewBox="0 0 120 112" role="img" aria-label="Study buddy watching your cursor">
+    <rect x="40" y="88" width="40" height="20" rx="10" fill="#0f9b8e"/>
+    <g id="buddyHead">
+      <ellipse cx="60" cy="48" rx="44" ry="40" fill="#3a2f2f"/>
+      <ellipse cx="60" cy="56" rx="34" ry="32" fill="#ffd9b3"/>
+      <path d="M28,52 Q36,30 48,44 Q56,26 68,40 Q80,26 92,52 Q90,38 60,34 Q30,38 28,52 Z" fill="#3a2f2f"/>
+      <ellipse cx="46" cy="58" rx="9" ry="11" fill="#ffffff"/>
+      <ellipse cx="74" cy="58" rx="9" ry="11" fill="#ffffff"/>
+      <g id="buddyPupils">
+        <circle cx="46" cy="60" r="4.5" fill="#2b2b2b"/>
+        <circle cx="74" cy="60" r="4.5" fill="#2b2b2b"/>
+        <circle cx="47.5" cy="58.5" r="1.5" fill="#ffffff"/>
+        <circle cx="75.5" cy="58.5" r="1.5" fill="#ffffff"/>
+      </g>
+      <path id="buddySmile" d="M50,80 Q60,88 70,80" stroke="#2b2b2b" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <g id="buddyGrin">
+        <path d="M46,78 Q60,78 74,78 Q72,93 60,94 Q48,93 46,78 Z" fill="#8e3b3b"/>
+        <ellipse cx="60" cy="88" rx="6" ry="4" fill="#ff8f8f"/>
+      </g>
+      <path id="buddyFrown" d="M50,85 Q60,77 70,85" stroke="#2b2b2b" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <g id="buddyMad">
+        <path d="M35,42 L53,49" stroke="#2b2b2b" stroke-width="4" stroke-linecap="round"/>
+        <path d="M85,42 L67,49" stroke="#2b2b2b" stroke-width="4" stroke-linecap="round"/>
+        <path d="M90,24 L90,36 M84,30 L96,30" stroke="#c7431f" stroke-width="3.5" stroke-linecap="round"/>
+      </g>
+      <ellipse cx="38" cy="70" rx="5" ry="3" fill="#ff9d9d" opacity="0.8"/>
+      <ellipse cx="82" cy="70" rx="5" ry="3" fill="#ff9d9d" opacity="0.8"/>
+    </g>
+  </svg>
+  <div class="blab" id="blab"></div>
+  <h2 class="word" id="word">…</h2>
+  <p class="prompt" id="prompt">Choose the correct answer:</p>
+  <div class="progress"><i id="bar"></i></div>
+  <div class="options" id="options"></div>
+</main>
+<footer class="hint" id="hint">4 answers: the correct one plus 3 look-alikes drawn from similar events. Read carefully.</footer>
+<div class="overlay" id="overlay"><div class="panel" id="panel"></div></div>
+<script>
+/* __BANK_START__ */
+const WORDS = [{"id": "L5-01", "week": 5, "word": "Which Spanish governor secretly supplied the Americans early in the war, then after Spain entered it in 1779 seized British forts along the Mississippi and Gulf and drove the British from West Florida?", "definition": "Bernardo de Gálvez, governor of Spanish Louisiana", "wrong": ["The Marquis de Lafayette, who brought French soldiers to Brandywine", "Friedrich von Steuben, who drilled Washington's troops", "Casimir Pulaski, who trained American cavalry", "Thaddeus Kosciuszko, who built American forts", "Captain John Paul Jones, who captured the Serapis", "General Nathanael Greene, who commanded in the South", "General Daniel Morgan, victor of Cowpens", "Francis Marion, the Swamp Fox of South Carolina", "George Rogers Clark, who took Vincennes on the frontier"], "example": "Gálvez secretly sent medicine, cloth, muskets, and powder, then took British forts on the Mississippi/Gulf and West Florida; Galveston, Texas is named for him.", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L5-02", "week": 5, "word": "Which young French noble fought at Brandywine, became one of Washington's most trusted friends, and convinced France to send several thousand trained soldiers?", "definition": "The Marquis de Lafayette", "wrong": ["Comte de Rochambeau, who marched French troops to Yorktown", "Admiral de Grasse, whose fleet closed Chesapeake Bay", "Friedrich von Steuben of Prussia", "Bernardo de Gálvez of Spanish Louisiana", "Casimir Pulaski, trainer of cavalry", "Thaddeus Kosciuszko, builder of forts", "Benedict Arnold before his treason", "Thomas Jefferson, Virginia's governor", "John Paul Jones of the Bonhomme Richard"], "example": "Lafayette fought at Brandywine and secured thousands of French soldiers for the Patriot cause.", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L5-03", "week": 5, "word": "Which veteran of the Prussian army, considered the best in Europe, taught Washington's troops to march and drill?", "definition": "Friedrich von Steuben", "wrong": ["The Marquis de Lafayette, who secured French troops", "Casimir Pulaski, who trained cavalry", "Thaddeus Kosciuszko, who built forts and defenses", "General Nathanael Greene, who chose advantageous ground", "General Daniel Morgan of Cowpens", "Bernardo de Gálvez of Spanish Louisiana", "Francis Marion, leader of militia raids", "Comte de Rochambeau, French commander at Yorktown", "Benedict Arnold while still a Patriot general"], "example": "Von Steuben, ex-Prussian army, drilled the Continentals in marching and drill.", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L5-04", "week": 5, "word": "At the Battle of Monmouth in 1778, what did Mary Ludwig Hays do to earn the nickname Molly Pitcher?", "definition": "She carried water to soldiers, then loaded and fired her wounded husband's cannon", "wrong": ["She sewed stars-and-stripes flags for Washington's army in Philadelphia", "She repaired cannons and guns with blacksmith Samuel Leverett after Concord", "She took charge of her husband's farm and business while he fought", "She wrote a celebrated poem to General Washington", "She carried dispatches through British lines at Yorktown", "She nursed the wounded alongside Martha Washington at Valley Forge", "She spied on Loyalist raids in Pennsylvania and New York", "She negotiated the release of prisoners after Cowpens", "She printed the Continental currency used to pay troops"], "example": "Hays carried water at Monmouth (hence Molly Pitcher) and took her wounded husband's place on the cannon.", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L5-05", "week": 5, "word": "What distinction does Phillis Wheatley hold in American literary history?", "definition": "She was the first published African American female poet", "wrong": ["She sewed the first American flag of stars and stripes", "She carried water to soldiers at the Battle of Monmouth", "She repaired Patriot cannons after the Battle of Concord", "She led Iroquois raids alongside Loyalists in Pennsylvania", "She commanded cavalry trained by Casimir Pulaski", "She negotiated the Treaty of Paris in 1782", "She was born in Philadelphia to free parents", "She fought in the ranks at the Battle of Yorktown", "She served as Washington's chief military engineer"], "example": "Wheatley, enslaved in Boston at age 7, mastered English, Greek, and Latin and wrote 'To His Excellency General Washington'; freed after her London success.", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L5-06", "week": 5, "word": "In February 1779, how did George Rogers Clark's small force capture the British fort at Vincennes?", "definition": "They spread out through the woods to appear more numerous, with help from Miami Indians", "wrong": ["They ordered the front line to fire twice, retreat, and lure the British into crossfire", "They appeared suddenly from swamps, attacked, and vanished back into them", "A French fleet closed the nearby bay while armies laid siege by land", "They captured a British warship offshore and forced the fort's surrender", "Loyalist militia inside the fort opened the gates to them", "They tunneled under the walls during a three-month siege", "Spanish troops from West Florida stormed the fort with them", "They bribed the British commander with Continental currency", "They waited until the garrison starved after a blockade of the Ohio River"], "example": "Clark first took Kaskaskia and Cahokia with Miami help, then bluffed Vincennes with a spread-out force; it surrendered February 1779.", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L5-07", "week": 5, "word": "What was Captain John Paul Jones's greatest victory, won in September 1779 on the North Sea in Britain's backyard?", "definition": "Capturing the powerful British warship Serapis aboard the Bonhomme Richard", "wrong": ["Blockading American ports to cut Patriot supply routes", "Seizing Savannah, Charleston, and Camden in the South", "Driving the British out of West Florida", "Taking British forts at Kaskaskia and Cahokia", "Closing Chesapeake Bay to trap Cornwallis", "Burning Richmond alongside Benedict Arnold", "Training Washington's troops to march and drill", "Leading the French soldiers ashore at Brandywine", "Capturing British forts on the Mississippi River"], "example": "Jones captured the Serapis in September 1779; note the blockade of American ports was something the British navy did to the Americans.", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L5-08", "week": 5, "word": "What trick won the Battle of Cowpens for General Daniel Morgan in January 1781?", "definition": "His front line fired two volleys, retreated, and drew the charging British into his second rank's fire", "wrong": ["His militia struck from swamps and vanished back into them", "His troops spread through woods to look more numerous", "A French fleet cut off the British by sea while he besieged them", "His cavalry charged the British warship Serapis offshore", "His Loyalist allies opened the British camp gates at night", "His artillery bombarded Charleston until it surrendered", "His soldiers tunneled under Guilford Courthouse", "His Spanish allies attacked from West Florida", "His troops burned Richmond to draw the British out"], "example": "Morgan's staged retreat at Cowpens (January 1781) pulled the British into the second line's fire.", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L5-09", "week": 5, "word": "What was the outcome of the fighting at Guilford Courthouse, one of the bloodiest battles of the war?", "definition": "The Americans retreated, but the British sustained such great losses it helped turn the tide", "wrong": ["Cornwallis surrendered his entire army to Washington and Rochambeau", "The British seized the town and held the Carolinas for the rest of the war", "A French fleet arrived and trapped the British against the sea", "Morgan's front-line retreat trick destroyed the British column", "Loyalist militia switched sides and joined Greene mid-battle", "The battle never happened because Cornwallis marched to Virginia instead", "John Paul Jones bombarded the courthouse from offshore", "Spanish troops from Florida decided the battle", "The two sides signed an armistice that ended the southern campaign"], "example": "At Guilford Courthouse the Americans retreated yet inflicted losses so heavy the momentum shifted to the Patriots.", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L5-10", "week": 5, "word": "Under the Treaty of Paris, where did the southern border of the newly recognized United States stop?", "definition": "At Florida, which was returned to Spain", "wrong": ["At the Mississippi River, which bounded the west", "At the Great Lakes, which bounded the north", "At the Atlantic Ocean, which bounded the east", "At New Orleans, which Spain ceded to the United States", "At the Appalachian Mountains, keeping settlers east", "At the Ohio River, dividing free and slave territory", "At Charleston, which Britain kept as a naval base", "At the Chesapeake Bay, site of the last battle", "At Vincennes, site of Clark's victory"], "example": "Treaty of Paris: US from Atlantic to Mississippi, north to the Great Lakes, south to Florida (returned to Spain); Congress ratified it April 15, 1783.", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L5-11", "week": 5, "word": "Known as the Swamp Fox, how did Francis Marion's small militia band harass the British in South Carolina?", "definition": "With guerrilla hit-and-run tactics, striking suddenly from the swamps and retreating back into them", "wrong": ["By ordering the front line to fire twice, retreat, and lure the British into crossfire", "By spreading through woods to appear more numerous", "By laying siege with 16,000 troops while a fleet closed the bay", "By capturing the British warship Serapis on the North Sea", "By seizing Savannah, Charleston, and Camden for the Crown", "By drilling troops to march in Prussian formation", "By building forts and defenses as a military engineer", "By training cavalry for charges on horseback", "By blockading ports with a superior navy"], "example": "Marion's band used the swamps for sudden guerrilla (hit-and-run) attacks.", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L5-12", "week": 5, "word": "How did General Nathanael Greene, taking command in the South in 1780, use local geography against Cornwallis?", "definition": "He engaged the British only on ground that put them at a disadvantage", "wrong": ["He ordered his front line to retreat after exactly two volleys", "He hid his militia in swamps for surprise raids", "He spread his small force through woods to look larger", "He trapped the British on a peninsula with a French fleet", "He blockaded southern ports with captured warships", "He burned Richmond to deny the British supplies", "He built a chain of forts across the Carolina backcountry", "He charged British lines with Polish-trained cavalry", "He waited in New York while the French fought alone"], "example": "Greene (1780) fought only where local geography disadvantaged the British, wearing Cornwallis down.", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L5-13", "week": 5, "word": "What did Benedict Arnold do after turning traitor in September 1780 while commanding West Point?", "definition": "He escaped to the British, led their troops, and captured and burned Richmond and other towns", "wrong": ["He was captured by a Patriot patrol and hanged on Washington's orders", "He fled to Spanish Louisiana and served Governor Gálvez", "He joined Lafayette's raids against Cornwallis in Virginia", "He surrendered West Point's garrison to the French fleet", "He led the militia victory at Cowpens in January 1781", "He trained Washington's troops to march and drill", "He negotiated the Treaty of Paris alongside Franklin", "He commanded the Serapis against John Paul Jones", "He retired to Philadelphia and wrote his memoirs"], "example": "Arnold plotted to hand over West Point (Sept 1780), escaped, then led British raids including burning Richmond; ordered hanged but never captured.", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L5-14", "week": 5, "word": "At Yorktown, what were the relative strengths when 16,000+ American and French troops laid siege, and when did the British surrender?", "definition": "Fewer than 8,000 British under Cornwallis; surrender on October 19, 1781", "wrong": ["Fewer than 8,000 British; surrender on April 15, 1783", "Equal armies of 12,000; surrender in September 1779", "More British than allies; surrender in January 1781", "Fewer than 8,000 British; surrender in February 1779", "16,000 British vs 8,000 allies; surrender in December 1783", "Fewer than 8,000 British; surrender in May 1787", "20,000 British; surrender after Guilford Courthouse", "Fewer than 8,000 British; surrender in September 1780", "Equal armies; surrender on the North Sea aboard the Serapis"], "example": "Siege: 16,000+ allies vs under 8,000 British; surrender October 19, 1781 (band played 'The World Turned Upside Down'; Cornwallis skipped the ceremony, claiming illness).", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L5-15", "week": 5, "word": "At Yorktown, which French commander marched troops overland with Washington while which one closed the trap by sea?", "definition": "Comte de Rochambeau overland; Admiral de Grasse's fleet in Chesapeake Bay", "wrong": ["Admiral de Grasse overland; Comte de Rochambeau by sea", "The Marquis de Lafayette overland; John Paul Jones by sea", "Friedrich von Steuben overland; Bernardo de Gálvez by sea", "Comte de Rochambeau overland; the British navy by sea", "Benedict Arnold overland; Casimir Pulaski by sea", "Daniel Morgan overland; Thaddeus Kosciuszko by sea", "George Rogers Clark overland; Francis Marion by sea", "Thomas Jefferson overland; the Spanish fleet by sea", "Nathanael Greene overland; Admiral de Grasse retreating by sea"], "example": "Washington + Rochambeau marched south to join Lafayette; de Grasse's fleet sealed Chesapeake Bay so Cornwallis could escape neither by land nor sea.", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L5-16", "week": 5, "word": "Who did Congress send to Paris in 1782 to negotiate the treaty ending the war?", "definition": "Benjamin Franklin and John Adams, with John Jay and Henry Laurens", "wrong": ["George Washington and Thomas Jefferson, with Lafayette advising", "John Paul Jones and Nathanael Greene, with Rochambeau advising", "Benedict Arnold and Charles Cornwallis, with Clinton mediating", "Bernardo de Gálvez and Admiral de Grasse, with Spain mediating", "Daniel Morgan and Francis Marion, with Greene advising", "John Jay alone, with no fellow negotiators", "Henry Laurens and Benedict Arnold, with Franklin advising", "Thomas Jefferson and James Madison, with Jay advising", "Comte de Rochambeau and Admiral de Grasse, with Washington advising"], "example": "Talks began in Paris in 1782; Franklin, Adams, Jay (NY), and Laurens (SC) won most American demands since Britain was eager to end the war.", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L5-17", "week": 5, "word": "Why was April 15, 1783, when Congress ratified the Treaty of Paris, a symbolic date?", "definition": "It was almost eight years to the day since the battles of Lexington and Concord", "wrong": ["It was exactly ten years since the Treaty of Paris talks began", "It marked one year since Cornwallis surrendered at Yorktown", "It was the same day Washington bid farewell at Fraunces Tavern", "It marked eight years since the Declaration of Independence", "It was the day the French fleet first entered Chesapeake Bay", "It marked one year since the Battle of Cowpens", "It was the same day Arnold turned traitor at West Point", "It marked five years since France joined the war", "It was the day the last British troops left New York"], "example": "Ratification (April 15, 1783) fell almost eight years to the day after Lexington and Concord; Washington's Fraunces Tavern farewell came later, in December 1783.", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L5-18", "week": 5, "word": "What pattern marked the frontier war involving Joseph Brant, the Wyoming Valley, and Iroquois villages?", "definition": "Brant's Loyalist-Indian raids on Pennsylvania and New York settlements, the Wyoming massacre of 360 settlers, then Patriot destruction of Iroquois villages in retaliation", "wrong": ["Miami Indians helping Clark take Vincennes without any bloodshed", "Iroquois nations uniting with the Patriots from the war's start", "British forts on the Mississippi falling to French regulars", "Loyalists and Patriots signing a frontier truce in 1778", "Spanish troops driving the British from West Florida villages", "The Wyoming Valley voting to join the Confederation peacefully", "Brant negotiating the Treaty of Paris frontier terms", "Frontier militia using swamp guerrilla tactics like Marion's", "Washington personally leading the retaliation raids"], "example": "Brant raided with Loyalists; Loyalists and allied Indians killed 360 settlers at Wyoming (1778); Patriots retaliated by destroying dozens of Iroquois villages.", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L5-19", "week": 5, "word": "Which woman is legend-credited with sewing the first American flag of stars and stripes for Washington's army?", "definition": "Betsy Ross of Philadelphia", "wrong": ["Mary Ludwig Hays, who carried water at Monmouth", "Betsy Hagar, who repaired cannons with Samuel Leverett", "Martha Washington, who joined her husband at the front", "Phillis Wheatley, who wrote to General Washington", "A nurse who washed clothes and cooked for the troops", "The wife of blacksmith Samuel Leverett of Concord", "A Philadelphia printer who published army orders", "The daughter of General Nathanael Greene", "A camp follower who loaded cannon at Yorktown"], "example": "Legend credits Philadelphia's Betsy Ross with the first stars-and-stripes flag — distinct from Molly Pitcher (Monmouth cannon) and Hagar (Concord gun repairs).", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L5-20", "week": 5, "word": "Why did geography itself favor the American cause against Britain?", "definition": "Britain had to ship soldiers and supplies thousands of miles and fight a spread-out enemy the Americans knew firsthand", "wrong": ["Britain's nearby Canadian bases gave it short, safe supply lines", "The Atlantic crossing took only days, so reinforcements arrived quickly", "American troops were concentrated in one city, easy to defend", "The British knew the southern swamps better than Marion did", "France paid Britain to lengthen its own supply routes", "The war was fought entirely at sea, where Britain ruled", "Mountains kept French armies from ever reaching America", "Deserts between the colonies slowed American movement most", "Britain's navy could sail up rivers the Americans had never mapped"], "example": "Distance + dispersed enemy + American local knowledge beat British power; Spanish pressure on the Gulf/Mississippi and French money and troops compounded it.", "lesson": "Topic 1 · Lesson 5: Winning Independence"}, {"id": "L1-01", "week": 1, "word": "Congress approved the Articles of Confederation in 1777, yet they took effect only in 1781. What caused the delay?", "definition": "Maryland refused to ratify until landed states ceded western claims; Virginia held out last until Jefferson persuaded it", "wrong": ["Shays' Rebellion forced Congress to rewrite the Articles first", "The Philadelphia convention had to approve them in May 1787", "The Northwest Ordinance had to pass before any government existed", "Britain refused to withdraw its Great Lakes forts until 1781", "Spain closed New Orleans until Congress paid its debts", "Nine states voted the Articles down twice before passing them", "The Continental dollar collapsed and had to be replaced first", "Vermont's dispute with New York had to be settled by a court", "France withheld promised loans until the war ended in 1783"], "example": "Maryland held out for western-land cessions; Virginia, persuaded by Jefferson, ceded last, so Maryland ratified in 1781.", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}, {"id": "L1-02", "week": 1, "word": "Under the Articles of Confederation, how many states had to approve before a law passed by Congress could go into effect?", "definition": "Nine states", "wrong": ["Sixty thousand free settlers", "Thirty-six sections of a township", "All thirteen states unanimously", "One delegate from each state", "Six hundred forty dollars of property", "Five thousand free white male residents", "Seven states, a simple majority", "Two-thirds of the Continental Army's officers", "Every state with a western land claim"], "example": "Nine states had to approve a law — and even then, enforcement was left to the states.", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}, {"id": "L1-03", "week": 1, "word": "How was each state represented in Congress under the Articles of Confederation?", "definition": "Each state sent one delegate and had one vote, whatever its size or population", "wrong": ["Votes were proportional to each state's population", "Each state sent two delegates with two votes", "Representation was based on taxes each state paid", "Large landed states got extra votes for western claims", "Only the nine largest states could vote", "Each state voted once per 60,000 residents", "Virginia and Massachusetts shared a single rotating vote", "Delegates were appointed by the president", "States bought votes with contributions to the treasury"], "example": "One state, one vote regardless of size — while each state kept most power for itself.", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}, {"id": "L1-04", "week": 1, "word": "Which important power did Congress LACK under the Articles of Confederation?", "definition": "The power to tax — it could only ask states for funds or borrow", "wrong": ["The power to declare war", "The power to coin money", "The power to operate post offices", "The power to conduct foreign affairs and sign treaties", "The power to appoint military officers", "The power to admit Vermont as a state", "The power to survey western townships", "The power to borrow money from foreign nations", "The power to ask states for funds"], "example": "Congress could declare war, coin money, run post offices, make treaties, and appoint officers — but not tax, regulate trade, enforce laws, and it had no president or courts.", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}, {"id": "L1-05", "week": 1, "word": "The Articles provided no system of courts. What problem did that cause?", "definition": "There was no way to settle conflicts between states, such as New Hampshire and New York both claiming Vermont", "wrong": ["Congress could not appoint any military officers", "States were forbidden to print their own currency", "Criminals in Shays' Rebellion could not be tried at all", "The Continental dollar could not be declared worthless", "Britain could not be sued over its Great Lakes forts", "Loyalists could not reclaim property after the war", "Western settlers could not buy township sections", "Farmers could not challenge tax seizures in Massachusetts courts", "Disputed elections for Congress could not be resolved"], "example": "With no courts, interstate conflicts like the New Hampshire–New York fight over Vermont had no arbiter.", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}, {"id": "L1-06", "week": 1, "word": "Who was allowed to vote under most state constitutions after independence?", "definition": "White men over 21 who owned property or paid a certain amount of taxes", "wrong": ["All adults, including women and free African Americans, in every state", "Only members of the Continental Congress", "White men over 21 with no property requirement at all", "Only owners of western land claims", "Women in every state, following New Jersey's lead", "Enslaved people who had served in the Revolution", "Only taxpayers in states that had a governor — so never Pennsylvania", "Catholics and non-property holders were the main new voters", "Anyone who signed an oath to the Articles of Confederation"], "example": "Most states: white, male, over 21, plus property or taxes. Exceptions: some New Jersey women for a time, and free African American male property owners in a few states; Pennsylvania had no governor.", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}, {"id": "L1-07", "week": 1, "word": "What did the Land Ordinance of 1785 set up for the Northwest Territory?", "definition": "Surveyed townships of 36 one-square-mile sections sold from $640, one section per township for public schools", "wrong": ["A territorial government guaranteeing rights and outlawing slavery", "Statehood for any territory once it reached 60,000 free settlers", "Five new states: Ohio, Indiana, Illinois, Michigan, Wisconsin", "A national bank to replace the worthless Continental dollar", "Federal courts to settle the Vermont dispute", "A standing federal army to collect taxes from the states", "Free land grants of 40 acres to every Revolutionary veteran", "A capital city on the Ohio River for the new government", "State assemblies for territories with 9,000 residents"], "example": "1785: survey into townships, 36 sections of 640 acres at $640 minimum, one section for schools — privatizing federal land. Don't confuse with 1787's government/rights/slavery/statehood terms.", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}, {"id": "L1-08", "week": 1, "word": "What did the Northwest Ordinance of 1787 do that the Land Ordinance of 1785 had not?", "definition": "Set up territorial government, guaranteed settlers' rights, outlawed slavery there, and promised statehood at 60,000 free settlers", "wrong": ["Divided townships into 36 sections sold for at least $640", "Reserved one section per township for public schools", "Gave Congress the power to tax the territories", "Created federal courts to settle state border disputes", "Granted every settler 640 acres free of charge", "Admitted Vermont immediately to settle its dispute", "Allowed slavery north of the Ohio River to fund schools", "Created the presidency to execute territorial laws", "Forced Spain to reopen New Orleans to American shipping"], "example": "1787: government + rights + slavery ban + education + statehood path (60,000). 1785 was the survey-and-sale system ($640 sections, school section).", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}, {"id": "L1-09", "week": 1, "word": "Why did Americans start calling any useless thing 'not worth a Continental'?", "definition": "Congress printed paper dollars unbacked by gold or silver, and with no power to tax they became nearly worthless", "wrong": ["British agents flooded the colonies with counterfeit coins", "States melted their coins down for musket balls", "Spain closed New Orleans, making western money useless", "Congress taxed the dollars so heavily none were left", "The dollars could only be spent in other countries", "Vermont printed its own dollars that nobody accepted", "Loyalists burned every Continental bill they found", "The bills expired one year after the war ended", "France refused to accept them for war supplies"], "example": "Continentals weren't backed by gold or silver; states printed rival currencies and refused each other's money, strangling trade.", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}, {"id": "L1-10", "week": 1, "word": "What did Shays' Rebellion lead many American leaders to do?", "definition": "Call a May 1787 Philadelphia convention to revise the Articles — which built an entirely new framework of government", "wrong": ["Send the federal army to crush the farmers, proving Congress's power", "Give Congress the power to tax immediately in 1786", "Cancel all farm debts and abolish Massachusetts taxes", "Ask Britain to send troops to restore order", "Elect Daniel Shays governor of Massachusetts", "Abolish all state militias as too dangerous", "Pass the Northwest Ordinance to give farmers western land", "Pay Loyalists for property lost in the war", "Close the courts so no more farms could be seized"], "example": "Shays' 1786 uprising (MA farmers vs taxes and farm seizures, put down by the state militia) convinced leaders the Articles failed — hence Philadelphia, May 1787.", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}, {"id": "L1-11", "week": 1, "word": "What freedoms did Virginia's bill of rights guarantee its citizens?", "definition": "Trial by jury, freedom of religion, and freedom of the press", "wrong": ["The right to vote for all adults regardless of property", "Freedom from all taxes and court seizures", "The right to own western lands beyond the Appalachians", "Trial by Congress and freedom from state laws", "The right to print Continental currency", "Freedom of religion, but only for Anglicans", "The right to elect the president directly", "Trial by jury, but only for property owners", "The right to secede from the Confederation"], "example": "Virginia's bill of rights (a list of freedoms government promises to protect) guaranteed jury trial, religious freedom, and press freedom; other states followed.", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}, {"id": "L1-12", "week": 1, "word": "Which voters were the exceptions to the white-male-property rule in the early states?", "definition": "Some New Jersey women for a time, and free African American male property owners in a few states", "wrong": ["Women in every state, permanently", "Enslaved men who had served in the Revolution", "All white men over 21 with no property needed", "Only residents of Pennsylvania, which had no governor", "Catholics in every state as a protected class", "Teenagers over 16 who paid taxes", "Western settlers regardless of race or sex", "Loyalists who had sworn to the Articles", "Only Continental Army veterans"], "example": "Rule: white, male, 21+, property/taxes. Exceptions: NJ women briefly; free Black male property owners in a few states.", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}, {"id": "L1-13", "week": 1, "word": "Why did delegates struggle to write a national plan even though they agreed on Revolutionary principles?", "definition": "States would not give up power, few felt like citizens of one nation, and people feared swapping British tyranny for another strong government", "wrong": ["France demanded approval rights over the plan", "The states could not agree on whether to allow slavery anywhere", "Congress insisted on a king to lead the new nation", "Delegates wanted the British Parliament to review it first", "No state had a constitution to use as a model", "The war had already ended, removing all urgency", "Small states demanded two votes each in Congress", "Spain threatened war unless New Orleans was excluded", "Vermont's delegates blocked every draft"], "example": "Using state constitutions as guides, delegates still deadlocked over state power vs central power and fear of a new tyranny.", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}, {"id": "L1-14", "week": 1, "word": "As a plan of government, what were the Articles of Confederation's strengths?", "definition": "They left states free to decide for themselves and kept the federal government from gaining too much power — an effective wartime compromise", "wrong": ["They gave Congress the power to tax and regulate trade", "They created a presidency and a national court system", "They forced every state to accept the same currency", "They abolished all state governments at once", "They required unanimous votes so no state ever lost", "They freed all enslaved people in every state", "They gave Congress its own army independent of the states", "They settled all western land claims immediately", "They made the Continental dollar backed by gold"], "example": "Strengths: state freedom + federal limits during a revolution. The tax/trade/courts/president powers listed here are things the Articles specifically lacked.", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}, {"id": "L1-15", "week": 1, "word": "Which of these powers DID Congress have under the Articles of Confederation?", "definition": "Appoint military officers", "wrong": ["Tax the states directly", "Regulate trade between states", "Execute laws through a president", "Settle state conflicts through national courts", "Force states to contribute to the treasury", "Stop states from printing their own money", "Compel Britain to abandon the Great Lakes forts", "Force Spain to reopen New Orleans", "Enforce the laws it passed"], "example": "Congress could declare war, appoint officers, coin money, run post offices, and make treaties — but not tax, regulate trade, enforce laws, and it had no president or courts.", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}, {"id": "L1-16", "week": 1, "word": "How did Britain and Spain each exploit the Confederation's weakness after the Revolution?", "definition": "Britain kept troops on the Great Lakes ignoring the Treaty of Paris; Spain closed New Orleans to American shipping", "wrong": ["Britain blockaded New Orleans while Spain held the Great Lakes", "Spain returned Florida while Britain paid off US debts", "Britain ratified the Articles while Spain invaded Georgia", "Spain opened New Orleans while Britain withdrew everywhere", "Britain taxed American shipping while Spain coined dollars", "Spain joined the Confederation while Britain seized Vermont", "Britain enforced US trade laws while Spain guarded them", "Spain lent Congress gold while Britain accepted Continentals", "Britain and Spain both recognized every state currency"], "example": "Britain defied the treaty at the Great Lakes; Spain's New Orleans closure strangled western farmers shipping east.", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}, {"id": "L1-17", "week": 1, "word": "Under the Northwest Ordinance, what populations let a territory elect an assembly vs apply for statehood?", "definition": "5,000 free white males for an assembly with a non-voting Congress delegate; 60,000 free settlers for a constitution and statehood bid", "wrong": ["60,000 for an assembly; 5,000 for statehood", "9 states for an assembly; 13 states for statehood", "36 sections for an assembly; 640 acres for statehood", "5,000 for a governor; 60,000 for a president", "500 for an assembly; 5,000 for statehood", "60,000 taxpayers for an assembly; 5,000 soldiers for statehood", "Nine delegates for an assembly; one delegate for statehood", "36,000 for an assembly; 640,000 for statehood", "5,000 enslaved people for an assembly; 60,000 for statehood"], "example": "5,000 free white males → assembly + non-voting delegate; 60,000 free settlers → constitution + statehood application.", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}, {"id": "L1-18", "week": 1, "word": "Which five states were created from the Northwest Territory?", "definition": "Ohio, Indiana, Illinois, Michigan, and Wisconsin", "wrong": ["Vermont, Kentucky, Tennessee, Maine, and Alabama", "Virginia, Massachusetts, New York, Connecticut, and Georgia", "Pennsylvania, New Jersey, Delaware, Maryland, and Carolina", "Florida, Louisiana, Texas, Mississippi, and Missouri", "New York, Virginia, Connecticut, Massachusetts, and Carolina", "Ohio, Vermont, Kentucky, Maine, and Tennessee", "Illinois, Wisconsin, Iowa, Minnesota, and Dakota", "Georgia, Alabama, Mississippi, Tennessee, and Kentucky", "Spain's Florida, British Canada, and three river territories"], "example": "The Northwest Territory (west of Pennsylvania, north of the Ohio, south of the Great Lakes, east of the Mississippi) became OH, IN, IL, MI, WI.", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}, {"id": "L1-19", "week": 1, "word": "Who was Daniel Shays, and what did his followers actually do in 1786?", "definition": "A Massachusetts farmer and Bunker Hill/Saratoga veteran whose 1,000+ followers attacked courthouses to stop farm seizures for debts", "wrong": ["A Virginia planter who led the Philadelphia convention of 1787", "A British officer who seized farms for unpaid Crown taxes", "A Boston merchant protesting the Continental dollar's collapse", "A Pennsylvania governor putting down a tax revolt", "A French volunteer drilling the rebel farmers", "A New Jersey judge foreclosing on western lands", "A Connecticut officer collecting the federal whiskey tax", "A Loyalist raider burning towns with Joseph Brant", "A Spanish agent closing New Orleans to shipping"], "example": "Shays (farmer, Bunker Hill + Saratoga vet) led 1,000+ farmers against MA taxes and court seizures of farms; the state militia drove them off.", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}, {"id": "L1-20", "week": 1, "word": "What is an economic depression, and how did the post-Revolution one ruin indebted farmers?", "definition": "Business slows, prices and wages fall, unemployment rises; postwar demand for crops fell so borrowers couldn't repay, then taxes and seizures took their farms", "wrong": ["Banks print too much gold-backed money, making debts too easy to repay", "Business booms, prices soar, and farmers grow too rich to manage", "Trade stops because the oceans freeze over for years", "A plague kills livestock, so farmers switch to manufacturing", "Congress taxes farm goods so heavily that farming becomes illegal", "Spain buys the entire crop, leaving Americans hungry", "British troops burn every farm south of New England", "The government forgives all debts, destroying lenders instead", "New states refuse to admit indebted settlers"], "example": "Depression = slowing business, falling prices/wages, rising unemployment. Wartime crop demand vanished; loans + MA taxes + court seizures crushed farmers.", "lesson": "Topic 2 · Lesson 1: A Weak Confederation"}];
+/* __BANK_END__ */
+const LETTERS = ["A", "B", "C", "D"];
+const state = { queue: [], idx: 0, score: 0, streak: 0, best: 0, right: 0, wrong: 0, trapHits: 0, missed: [], loseStreak: 0, current: null, locked: false, filter: "all", count: "all", mode: "meaning" };
+
+function $(id) { return document.getElementById(id); }
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+  }
+  return arr;
+}
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+/* Build 4 options: the correct answer + 3 distractors sampled fresh
+   from this question's own wrong list on every run. */
+function buildOptions(entry, all) {
+  const usedDefs = new Set([entry.definition]);
+  const pool = shuffle((entry.wrong || []).filter(function (w) { return w && !usedDefs.has(w); }));
+  const opts = [{ text: entry.definition, kind: "correct" }];
+  for (let k = 0; k < 3 && pool.length; k++) {
+    const t = pool.pop();
+    opts.push({ text: t, kind: "wrong" });
+    usedDefs.add(t);
+  }
+  return shuffle(opts);
+}
+
+function startGame(filter) {
+  state.filter = (filter === undefined) ? state.filter : filter;
+  const pool = state.filter === "all" ? WORDS.slice() : WORDS.filter(w => String(w.week) === String(state.filter));
+  const n = state.count === "all" ? pool.length : Math.min(parseInt(state.count, 10) || pool.length, pool.length);
+  state.queue = shuffle(pool.slice()).slice(0, n);
+  state.idx = 0; state.score = 0; state.streak = 0;
+  state.right = 0; state.wrong = 0; state.trapHits = 0; state.missed = []; state.loseStreak = 0;
+  nextQuestion();
+}
+
+function nextQuestion() {
+  state.locked = false;
+  hideOverlay();
+  if (state.idx >= state.queue.length) { endScreen(); return; }
+  const entry = state.queue[state.idx];
+  state.current = { entry: entry, options: buildOptions(entry, WORDS) };
+  render();
+}
+
+function render() {
+  const c = state.current, entry = c.entry;
+  $("weekPill").textContent = entry.lesson || ("Lesson " + entry.week);
+  $("typePill").textContent = "question";
+  $("word").textContent = entry.word;
+  $("prompt").textContent = "Choose the correct answer:";
+  $("hint").textContent = "4 answers: the correct one plus 3 look-alikes drawn from similar events. Read carefully.";
+  buddyMood();
+  updateFury();
+  runBlab();
+  $("qnum").textContent = (state.idx + 1) + "/" + state.queue.length;
+  $("score").textContent = state.score;
+  $("streak").textContent = state.streak;
+  $("bar").style.width = Math.round((state.idx / state.queue.length) * 100) + "%";
+  const box = $("options");
+  box.innerHTML = "";
+  c.options.forEach(function (o, i) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "opt"; b.dataset.idx = i;
+    b.innerHTML = '<span class="letter">' + LETTERS[i] + '</span><span>' + escapeHtml(o.text) + '</span>';
+    b.addEventListener("click", function () { answer(i); });
+    box.appendChild(b);
+  });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/* ---- synthesized sound effects (no audio files needed) ---- */
+let soundOn = true;
+let actx = null;
+function tone(freq, delay, dur, type, vol, slideTo) {
+  if (!soundOn) return;
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === "suspended") actx.resume();
+    const t = actx.currentTime + delay;
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g);
+    g.connect(actx.destination);
+    o.start(t);
+    o.stop(t + dur + 0.05);
+  } catch (e) { /* audio unavailable: stay silent */ }
+}
+function killAudio() {
+  if (actx) { try { actx.close(); } catch (e) {} }
+  actx = null;
+  musicGain = null;
+  nextChordAt = 0;
+}
+function playRelief() {
+  tone(620, 0, 0.5, "sine", 0.2, 420);
+  tone(880, 0.45, 0.4, "sine", 0.15, 990);
+}
+function playCorrect() {
+  const tier = state.streak >= 20 ? 4 : state.streak >= 5 ? 3 : state.streak >= 3 ? 2 : 1;
+  tone(523.25, 0, 0.18, "triangle", 0.25);
+  tone(659.25, 0.1, 0.18, "triangle", 0.25);
+  tone(783.99, 0.2, 0.3, "triangle", 0.28);
+  if (tier >= 2) tone(1046.5, 0.3, 0.35, "sine", 0.22);
+  if (tier >= 3) { tone(1318.5, 0.42, 0.5, "sine", 0.22); tone(1568, 0.55, 0.6, "triangle", 0.18); }
+  if (tier >= 4) { tone(1760, 0.68, 0.7, "triangle", 0.2); tone(2093, 0.8, 0.9, "sine", 0.18); }
+}
+function playWrong() {
+  tone(329.63, 0, 0.25, "sine", 0.22);
+  tone(261.63, 0.22, 0.45, "sine", 0.22);
+}
+function playAngry() {
+  tone(196, 0, 0.35, "square", 0.2, 98);
+  tone(147, 0.15, 0.4, "sawtooth", 0.18, 73);
+  tone(98, 0.35, 0.5, "square", 0.2, 65);
+}
+function playTrap() {
+  tone(110, 0, 0.5, "sawtooth", 0.2, 55);
+  tone(116.54, 0, 0.5, "square", 0.12, 58);
+  tone(220, 0.45, 0.3, "sawtooth", 0.15, 110);
+}
+/* ---- calm generative background music (soft pads + sparse melody) ---- */
+let musicOn = true;
+let musicGain = null, musicTimer = null, nextChordAt = 0, chordStep = 0;
+const CHORDS = [
+  [130.81, 164.81, 196.00, 261.63],
+  [98.00, 146.83, 196.00, 246.94],
+  [110.00, 130.81, 164.81, 220.00],
+  [87.31, 130.81, 174.61, 220.00]
+];
+const PENTA = [523.25, 587.33, 659.25, 783.99, 880.00, 1046.5];
+const CHORD_LEN = 4.2;
+const HOT = [
+  [261.63, 329.63, 392.00, 523.25],
+  [174.61, 261.63, 349.23, 440.00],
+  [196.00, 293.66, 392.00, 493.88],
+  [261.63, 329.63, 392.00, 523.25]
+];
+const HIGH = [1046.5, 1174.7, 1318.5, 1568.0, 1760.0];
+const TENSE = [
+  [110.00, 130.81, 164.81, 220.00],
+  [82.41, 123.47, 164.81, 196.00],
+  [87.31, 130.81, 174.61, 220.00],
+  [98.00, 146.83, 196.00, 246.94]
+];
+const DOOM = [[55.00, 82.41, 110.00, 130.81]];
+const LOW = [220.00, 233.08, 246.94];
+const BLAZE = [
+  [261.63, 329.63, 392.00, 523.25, 659.25],
+  [174.61, 220.00, 261.63, 349.23, 440.00],
+  [196.00, 246.94, 293.66, 392.00, 493.88],
+  [261.63, 329.63, 392.00, 523.25, 659.25]
+];
+const MOGC = [
+  [130.81, 261.63, 329.63, 392.00, 523.25, 659.25],
+  [98.00, 196.00, 293.66, 392.00, 493.88, 587.33],
+  [110.00, 220.00, 261.63, 329.63, 440.00, 523.25],
+  [87.31, 174.61, 261.63, 349.23, 440.00, 523.25]
+];
+const MOGN = [1318.5, 1568.0, 1760.0, 2093.0, 2349.3];
+let lastMood = "";
+function musicConfig() {
+  if (state.loseStreak >= 10) return { name: "doom", chords: DOOM, len: 6.0, pluck: 0.25, pluck2: 0.1, notes: LOW };
+  if (state.loseStreak >= 4) return { name: "tense", chords: TENSE, len: 5.0, pluck: 0.4, pluck2: 0.15, notes: PENTA };
+  if (state.streak >= 20) return { name: "mog", chords: MOGC, len: 2.4, pluck: 1.0, pluck2: 0.9, notes: MOGN };
+  if (state.streak >= 10) return { name: "blaze", chords: BLAZE, len: 2.6, pluck: 1.0, pluck2: 0.8, notes: HIGH };
+  if (state.streak >= 3) return { name: "hot", chords: HOT, len: 3.2, pluck: 0.9, pluck2: 0.6, notes: HIGH };
+  return { name: "calm", chords: CHORDS, len: CHORD_LEN, pluck: 0.7, pluck2: 0.4, notes: PENTA };
+}
+function ensureMusic() {
+  if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+  if (!musicGain) {
+    musicGain = actx.createGain();
+    musicGain.gain.value = 0.5;
+    musicGain.connect(actx.destination);
+  }
+}
+function padNote(freq, t, dur) {
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = "sine";
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(0.05, t + 1.6);
+  g.gain.setValueAtTime(0.05, t + dur - 1.6);
+  g.gain.linearRampToValueAtTime(0.0001, t + dur);
+  o.connect(g);
+  g.connect(musicGain);
+  o.start(t);
+  o.stop(t + dur + 0.1);
+}
+function pluck(freq, t) {
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = "triangle";
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.08, t + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
+  o.connect(g);
+  g.connect(musicGain);
+  o.start(t);
+  o.stop(t + 2);
+}
+function scheduleMusic() {
+  if (!soundOn || !musicOn) return;
+  try {
+    ensureMusic();
+    if (actx.state === "suspended") actx.resume();
+    const cfg = musicConfig();
+    if (cfg.name !== lastMood) { lastMood = cfg.name; nextChordAt = 0; }
+    if (!nextChordAt || nextChordAt < actx.currentTime) nextChordAt = actx.currentTime + 0.1;
+    while (nextChordAt < actx.currentTime + cfg.len * 2) {
+      const chord = cfg.chords[chordStep % cfg.chords.length];
+      for (let n = 0; n < chord.length; n++) padNote(chord[n], nextChordAt, cfg.len + 1.5);
+      if (Math.random() < cfg.pluck) pluck(pick(cfg.notes), nextChordAt + 1 + Math.random() * 2);
+      if (Math.random() < cfg.pluck2) pluck(pick(cfg.notes), nextChordAt + 2.5 + Math.random());
+      nextChordAt += cfg.len;
+      chordStep++;
+    }
+  } catch (e) { /* stay silent */ }
+}
+function startMusic() {
+  if (musicTimer) return;
+  musicTimer = setInterval(scheduleMusic, 1000);
+  scheduleMusic();
+}
+function answer(i) {
+  if (state.locked || !state.current) return;
+  state.locked = true;
+  const blab = document.getElementById("blab");
+  if (blab && blab.classList) blab.classList.remove("show");
+  const c = state.current, chosen = c.options[i];
+  const buttons = document.querySelectorAll("#options .opt");
+  buttons.forEach(function (b) { b.disabled = true; });
+  c.options.forEach(function (o, k) {
+    if (o.kind === "correct" && buttons[k]) buttons[k].classList.add("correct");
+  });
+  const hit = chosen && chosen.kind === "correct";
+  if (hit) {
+    state.score += 10 + Math.min(state.streak, 5);
+    state.streak += 1;
+    state.best = Math.max(state.best, state.streak);
+    state.right += 1;
+    const wasFurious = state.loseStreak >= 10;
+    state.loseStreak = 0;
+    if (buttons[i]) buttons[i].classList.add("correct");
+    if (wasFurious) playRelief(); else playCorrect();
+    showHappy(c, wasFurious);
+  } else {
+    state.wrong += 1;
+    state.streak = 0;
+    state.loseStreak += 1;
+    state.missed.push(c.entry);
+    if (buttons[i]) buttons[i].classList.add("picked-wrong");
+    if (chosen && chosen.kind === "trap") state.trapHits += 1;
+    if (state.loseStreak >= 10) playAngry(); else if (chosen && chosen.kind === "trap") playTrap(); else playWrong();
+    showSad(c, chosen);
+  }
+  $("score").textContent = state.score;
+  $("streak").textContent = state.streak;
+  buddyMood();
+  updateFury();
+}
+
+const HAPPY_SVG =
+  '<svg class="char char-happy" viewBox="0 0 200 195" role="img" aria-label="Happy character cheering">' +
+  '<ellipse cx="100" cy="82" rx="76" ry="70" fill="#3a2f2f"/>' +
+  '<path d="M70,158 L46,124" stroke="#ffd9b3" stroke-width="12" stroke-linecap="round"/>' +
+  '<path d="M130,158 L154,124" stroke="#ffd9b3" stroke-width="12" stroke-linecap="round"/>' +
+  '<circle cx="44" cy="120" r="9" fill="#ffd9b3"/><circle cx="156" cy="120" r="9" fill="#ffd9b3"/>' +
+  '<rect x="68" y="150" width="64" height="38" rx="14" fill="#e4572e"/>' +
+  '<ellipse cx="100" cy="96" rx="58" ry="54" fill="#ffd9b3"/>' +
+  '<path d="M46,78 L58,42 L76,68 L94,36 L112,68 L130,42 L154,78 Q152,58 100,52 Q48,58 46,78 Z" fill="#3a2f2f"/>' +
+  '<path d="M66,102 Q76,90 86,102" stroke="#2b2b2b" stroke-width="5" fill="none" stroke-linecap="round"/>' +
+  '<path d="M114,102 Q124,90 134,102" stroke="#2b2b2b" stroke-width="5" fill="none" stroke-linecap="round"/>' +
+  '<ellipse cx="62" cy="118" rx="9" ry="5" fill="#ff9d9d" opacity="0.85"/>' +
+  '<ellipse cx="138" cy="118" rx="9" ry="5" fill="#ff9d9d" opacity="0.85"/>' +
+  '<path d="M82,120 Q100,120 118,120 Q116,140 100,142 Q84,140 82,120 Z" fill="#8e3b3b"/>' +
+  '<ellipse cx="100" cy="135" rx="10" ry="6" fill="#ff8f8f"/>' +
+  '<path d="M150,40 l4,10 10,4 -10,4 -4,10 -4,-10 -10,-4 10,-4 Z" fill="#f6ae2d"/>' +
+  '<path d="M40,52 l3,7 7,3 -7,3 -3,7 -3,-7 -7,-3 7,-3 Z" fill="#f6ae2d"/>' +
+  '</svg>';
+const MOG_SVG =
+  '<svg class="char char-happy char-mog" viewBox="0 0 200 195" role="img" aria-label="Mogger character flexing">' +
+  '<ellipse cx="100" cy="82" rx="76" ry="70" fill="#2b2320"/>' +
+  '<path d="M32,86 L12,74 L30,66 Z" fill="#2b2320"/>' +
+  '<path d="M168,86 L188,74 L170,66 Z" fill="#2b2320"/>' +
+  '<path d="M70,158 L46,124" stroke="#ffd9b3" stroke-width="12" stroke-linecap="round"/>' +
+  '<path d="M130,158 L154,124" stroke="#ffd9b3" stroke-width="12" stroke-linecap="round"/>' +
+  '<circle cx="44" cy="120" r="9" fill="#ffd9b3"/><circle cx="156" cy="120" r="9" fill="#ffd9b3"/>' +
+  '<rect x="68" y="150" width="64" height="38" rx="14" fill="#23232e"/>' +
+  '<path d="M80,152 Q100,172 120,152" stroke="#f6c445" stroke-width="5" fill="none"/>' +
+  '<circle cx="100" cy="170" r="7" fill="#f6c445"/>' +
+  '<ellipse cx="100" cy="96" rx="58" ry="54" fill="#ffd9b3"/>' +
+  '<path d="M46,78 L58,42 L76,68 L94,36 L112,68 L130,42 L154,78 Q152,58 100,52 Q48,58 46,78 Z" fill="#2b2320"/>' +
+  '<path d="M56,96 L44,90" stroke="#14141c" stroke-width="6" stroke-linecap="round"/>' +
+  '<path d="M144,96 L156,90" stroke="#14141c" stroke-width="6" stroke-linecap="round"/>' +
+  '<rect x="56" y="86" width="88" height="28" rx="12" fill="#14141c"/>' +
+  '<path d="M70,90 L86,90 L76,110 L62,110 Z" fill="#ffffff" opacity="0.28"/>' +
+  '<path d="M84,124 Q106,132 120,112" stroke="#2b2b2b" stroke-width="5" fill="none" stroke-linecap="round"/>' +
+  '<path d="M162,52 l-9,18 11,0 -7,20 18,-27 -11,0 9,-15 Z" fill="#f6c445"/>' +
+  '<path d="M38,52 l-9,18 11,0 -7,20 18,-27 -11,0 9,-15 Z" fill="#f6c445"/>' +
+  '</svg>';
+const ANGRY_SVG =
+  '<svg class="char char-angry" viewBox="0 0 200 195" role="img" aria-label="Angry character shouting">' +
+  '<ellipse cx="100" cy="82" rx="76" ry="70" fill="#3a2f2f"/>' +
+  '<path d="M70,160 L58,188" stroke="#ffd9b3" stroke-width="12" stroke-linecap="round"/>' +
+  '<path d="M130,160 L142,188" stroke="#ffd9b3" stroke-width="12" stroke-linecap="round"/>' +
+  '<circle cx="56" cy="184" r="9" fill="#ffd9b3"/><circle cx="144" cy="184" r="9" fill="#ffd9b3"/>' +
+  '<rect x="68" y="150" width="64" height="38" rx="14" fill="#8e2f2f"/>' +
+  '<ellipse cx="100" cy="96" rx="58" ry="54" fill="#ffd9b3"/>' +
+  '<path d="M46,78 L58,42 L76,68 L94,36 L112,68 L130,42 L154,78 Q152,58 100,52 Q48,58 46,78 Z" fill="#3a2f2f"/>' +
+  '<path d="M60,82 L90,94" stroke="#2b2b2b" stroke-width="6" stroke-linecap="round"/>' +
+  '<path d="M140,82 L110,94" stroke="#2b2b2b" stroke-width="6" stroke-linecap="round"/>' +
+  '<path d="M64,102 L88,107 L64,112" stroke="#2b2b2b" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' +
+  '<path d="M136,102 L112,107 L136,112" stroke="#2b2b2b" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' +
+  '<path d="M150,44 C144,52 144,64 150,72 C156,64 156,52 150,44 Z" fill="none" stroke="#c7431f" stroke-width="4"/>' +
+  '<path d="M136,58 C144,54 156,54 164,58 C156,62 144,62 136,58 Z" fill="none" stroke="#c7431f" stroke-width="4"/>' +
+  '<ellipse cx="88" cy="142" rx="13" ry="11" fill="#5b1a1a"/>' +
+  '<ellipse cx="112" cy="142" rx="13" ry="11" fill="#5b1a1a"/>' +
+  '<circle class="puff" cx="36" cy="58" r="10" fill="#cfd8e3"/>' +
+  '<circle class="puff" cx="164" cy="58" r="10" fill="#cfd8e3" style="animation-delay:0.5s"/>' +
+  '</svg>';
+const RELIEF_SVG =
+  '<svg class="char char-happy char-relief" viewBox="0 0 200 195" role="img" aria-label="Relieved character exhaling">' +
+  '<ellipse cx="100" cy="82" rx="76" ry="70" fill="#3a2f2f"/>' +
+  '<path d="M70,158 L46,124" stroke="#ffd9b3" stroke-width="12" stroke-linecap="round"/>' +
+  '<path d="M130,158 L154,124" stroke="#ffd9b3" stroke-width="12" stroke-linecap="round"/>' +
+  '<circle cx="44" cy="120" r="9" fill="#ffd9b3"/><circle cx="156" cy="120" r="9" fill="#ffd9b3"/>' +
+  '<rect x="68" y="150" width="64" height="38" rx="14" fill="#e4572e"/>' +
+  '<ellipse cx="100" cy="96" rx="58" ry="54" fill="#ffd9b3"/>' +
+  '<path d="M46,78 L58,42 L76,68 L94,36 L112,68 L130,42 L154,78 Q152,58 100,52 Q48,58 46,78 Z" fill="#3a2f2f"/>' +
+  '<path d="M66,102 Q76,90 86,102" stroke="#2b2b2b" stroke-width="5" fill="none" stroke-linecap="round"/>' +
+  '<path d="M114,102 Q124,90 134,102" stroke="#2b2b2b" stroke-width="5" fill="none" stroke-linecap="round"/>' +
+  '<ellipse class="sweat" cx="150" cy="64" rx="7" ry="10" fill="#5b9bd5"/>' +
+  '<ellipse cx="148" cy="61" rx="2" ry="3" fill="#ffffff" opacity="0.7"/>' +
+  '<ellipse cx="62" cy="118" rx="9" ry="5" fill="#ff9d9d" opacity="0.85"/>' +
+  '<ellipse cx="138" cy="118" rx="9" ry="5" fill="#ff9d9d" opacity="0.85"/>' +
+  '<path d="M82,120 Q100,120 118,120 Q116,140 100,142 Q84,140 82,120 Z" fill="#8e3b3b"/>' +
+  '<ellipse cx="100" cy="135" rx="10" ry="6" fill="#ff8f8f"/>' +
+  '</svg>';
+function showHappy(c, relieved) {
+  const ov = $("overlay"), panel = $("panel");
+  const tier = relieved ? 1 : state.streak >= 20 ? 4 : state.streak >= 5 ? 3 : state.streak >= 3 ? 2 : 1;
+  ov.className = "overlay happy show tier-" + tier + (relieved ? " relief" : "");
+  const hype = tier === 4 ? "CERTIFIED MOGGER!" : tier === 3 ? "UNSTOPPABLE!" : tier === 2 ? "you're on a roll!" : "sparkling work!";
+  panel.innerHTML =
+    (tier === 4 ? '<div class="streak-banner b4">20+ CERTIFIED MOGGER</div>' : tier >= 2 ? '<div class="streak-banner">STREAK x' + state.streak + '</div>' : '') +
+    '<div class="char-wrap">' +
+    (tier >= 3 ? '<div class="aura"></div>' : '') +
+    (relieved ? RELIEF_SVG : tier === 4 ? MOG_SVG : HAPPY_SVG) +
+    (relieved
+      ? '<div class="bubble">Whew!<small>I thought you were gone for a second!</small></div></div>'
+      : '<div class="bubble">Correct!<small>Streak x' + state.streak + ' — ' + hype + '</small></div></div>') +
+    '<p class="detail">Answer: <b>' + escapeHtml(c.entry.definition) + '</b></p>' +
+    (c.entry.example ? '<p class="detail"><i>' + escapeHtml(c.entry.example) + '</i></p>' : '') +
+    '<button id="nextBtn" type="button">Next</button>';
+  addSparkles(panel, tier === 4 ? 150 : tier === 3 ? 70 : tier === 2 ? 44 : 22);
+  $("nextBtn").addEventListener("click", advance);
+  kickAnimation(ov);
+}
+
+function addSoot(panel) {
+  for (let k = 0; k < 16; k++) {
+    const s = document.createElement("span");
+    s.className = "soot";
+    s.style.left = (Math.random() * 100) + "%";
+    const size = 5 + Math.random() * 7;
+    s.style.width = size + "px";
+    s.style.height = size + "px";
+    s.style.animationDelay = (Math.random() * 0.5) + "s";
+    panel.appendChild(s);
+  }
+}
+function showSad(c, chosen) {
+  const ov = $("overlay"), panel = $("panel");
+  const wasTrap = chosen && chosen.kind === "trap";
+  const furious = state.loseStreak >= 10;
+  ov.className = "overlay sad show" + ((wasTrap || furious) ? " trap-flash" : "");
+  panel.innerHTML =
+    (wasTrap ? '<span class="trap-stamp">TRAPPED!</span>' : '') +
+    '<div class="char-wrap' + ((wasTrap && !furious) ? ' vanished">' : '">') +
+    '<div class="vortex"></div>' +
+    (furious ? ANGRY_SVG : '<svg class="char char-sad" viewBox="0 0 200 195" role="img" aria-label="Sad character crying">' +
+    '<ellipse cx="100" cy="82" rx="76" ry="70" fill="#3a2f2f"/>' +
+    '<path d="M70,160 L58,188" stroke="#ffd9b3" stroke-width="12" stroke-linecap="round"/>' +
+    '<path d="M130,160 L142,188" stroke="#ffd9b3" stroke-width="12" stroke-linecap="round"/>' +
+    '<rect x="68" y="150" width="64" height="38" rx="14" fill="#5b84ad"/>' +
+    '<ellipse cx="100" cy="96" rx="58" ry="54" fill="#ffe3c2"/>' +
+    '<path d="M46,78 L58,42 L76,68 L94,36 L112,68 L130,42 L154,78 Q152,58 100,52 Q48,58 46,78 Z" fill="#3a2f2f"/>' +
+    '<path d="M100,32 Q104,20 116,18" stroke="#3a2f2f" stroke-width="4" fill="none" stroke-linecap="round"/>' +
+    '<path d="M66,102 Q76,110 86,102" stroke="#2b2b2b" stroke-width="5" fill="none" stroke-linecap="round"/>' +
+    '<path d="M114,102 Q124,110 134,102" stroke="#2b2b2b" stroke-width="5" fill="none" stroke-linecap="round"/>' +
+    '<path d="M70,108 Q68,126 64,138" stroke="#5b9bd5" stroke-width="5" fill="none" stroke-linecap="round"/>' +
+    '<path d="M130,108 Q132,126 136,138" stroke="#5b9bd5" stroke-width="5" fill="none" stroke-linecap="round"/>' +
+    '<ellipse class="tdrop" cx="63" cy="146" rx="6" ry="8" fill="#5b9bd5" style="animation-delay:0.2s"/>' +
+    '<ellipse class="tdrop" cx="137" cy="146" rx="6" ry="8" fill="#5b9bd5" style="animation-delay:0.6s"/>' +
+    '<path d="M85,136 Q100,126 115,136" stroke="#2b2b2b" stroke-width="5" fill="none" stroke-linecap="round"/>' +
+    '</svg>') +
+    '<div class="bubble">' + (furious ? "Are you even trying?!?" : wasTrap ? "Trap! Oh no…" : "Not quite…") +
+    (furious ? '<small>10 wrong in a row. TEN.</small>'
+      : wasTrap ? '<small>that look-alike was planted just for this question!</small>'
+      : '<small>better luck next question!</small>') + '</div></div>' +
+    '<div class="answer-reveal"><span>Correct answer — remember it!</span><b>' + escapeHtml(c.entry.definition) + '</b>' +
+    (c.entry.example ? '<i>\u201c' + escapeHtml(c.entry.example) + '\u201d</i>' : '') + '</div>' +
+    '<button id="nextBtn" type="button">Next</button>';
+  addTears(panel, true);
+  addSoot(panel);
+  $("nextBtn").addEventListener("click", advance);
+  kickAnimation(ov);
+}
+
+function addSparkles(panel, count) {
+  count = count || 0;
+  const colors = ["#f6ae2d", "#e4572e", "#0f9b8e", "#ff5d8f", "#7ac74f"];
+  for (let k = 0; k < count; k++) {
+    const s = document.createElement("span");
+    const conf = k % 3 !== 0;
+    s.className = conf ? "confetti" : "sparkle";
+    if (conf) {
+      s.style.left = (4 + Math.random() * 92) + "%";
+      s.style.background = colors[k % colors.length];
+      s.style.animationDelay = (Math.random() * 0.5) + "s";
+    } else {
+      s.textContent = "+";
+      s.style.left = (8 + Math.random() * 84) + "%";
+      s.style.top = (18 + Math.random() * 50) + "%";
+      s.style.animationDelay = (Math.random() * 0.4) + "s";
+    }
+    panel.appendChild(s);
+  }
+}
+
+function addTears(panel, enabled) {
+  if (!enabled) return;
+  for (let k = 0; k < 7; k++) {
+    const t = document.createElement("span");
+    t.className = "tear";
+    t.style.left = (18 + k * 10) + "%";
+    t.style.animationDelay = (k * 0.09) + "s";
+    panel.appendChild(t);
+  }
+  for (let k = 0; k < 14; k++) {
+    const r = document.createElement("span");
+    r.className = "rain";
+    r.style.left = (Math.random() * 100) + "%";
+    r.style.animationDelay = (Math.random() * 0.6) + "s";
+    panel.appendChild(r);
+  }
+}
+
+/* One rAF kick starts the CSS animation pass. */
+function kickAnimation(ov) {
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(function () { ov.classList.add("go"); });
+  } else {
+    ov.classList.add("go");
+  }
+}
+
+function hideOverlay() {
+  const ov = $("overlay");
+  ov.className = "overlay";
+  ov.classList.remove("go", "show", "happy", "sad");
+}
+
+function runBlab() {
+  const b = document.getElementById("blab");
+  if (state.blabTimer && typeof clearTimeout !== "undefined") { clearTimeout(state.blabTimer); state.blabTimer = null; }
+  if (!b || !b.classList) return;
+  b.classList.remove("show");
+  if (Math.random() < 0.01 && state.current) {
+    const ok = state.current.options.filter(function (o) { return o.kind === "correct"; })[0];
+    if (ok) {
+      b.innerHTML = "Psst… the answer is \u201c" + escapeHtml(ok.text) + "\u201d <small>(don't tell her.)</small>";
+      b.classList.add("show");
+      if (typeof setTimeout !== "undefined") {
+        state.blabTimer = setTimeout(function () { b.classList.remove("show"); state.blabTimer = null; }, 5000);
+      }
+    }
+  }
+}
+function buddyMood() {
+  const b = document.getElementById("buddy");
+  if (!b || !b.setAttribute) return;
+  b.setAttribute("data-mood", state.loseStreak >= 10 ? "angry" : state.loseStreak > 0 ? "sad" : state.streak > 0 ? "happy" : "neutral");
+}
+function updateFury() {
+  const f = document.getElementById("fury"), box = document.getElementById("furyStat");
+  if (!f || !box) return;
+  f.textContent = state.loseStreak;
+  box.className = "stat" + (state.loseStreak >= 10 ? " max" : state.loseStreak >= 7 ? " high" : state.loseStreak >= 4 ? " med" : state.loseStreak >= 1 ? " low" : "");
+}
+function advance() {
+  state.idx += 1;
+  nextQuestion();
+}
+
+function retryMissed() {
+  if (!state.missed.length) return;
+  state.queue = shuffle(state.missed.slice());
+  state.missed = [];
+  state.idx = 0; state.score = 0; state.streak = 0;
+  state.right = 0; state.wrong = 0; state.trapHits = 0; state.loseStreak = 0;
+  nextQuestion();
+}
+
+function endScreen() {
+  const ov = $("overlay"), panel = $("panel");
+  const total = state.right + state.wrong;
+  const acc = total ? state.right / total : 1;
+  const n = state.queue.length;
+  let cls = "happy", face = HAPPY_SVG, banner = "";
+  let head = "Round complete!", sub = "you finished " + n + " questions!";
+  if (total > 0 && state.right === total) {
+    banner = '<div class="streak-banner b5">FLAWLESS!</div>';
+    head = "Flawless!";
+    sub = "not a single miss across " + n + " questions!";
+  } else if (acc >= 0.8) {
+    banner = '<div class="streak-banner b5">' + (n >= 50 ? "MARATHON MASTER" : "HISTORY MASTER") + '</div>';
+    head = "History Master!";
+    sub = "superb work across " + n + " questions!";
+  } else if (acc >= 0.5) {
+    head = "Great round!";
+    sub = "solid work across " + n + " questions!";
+  } else if (acc >= 0.25) {
+    cls = "sad";
+    face = RELIEF_SVG;
+    head = "Rough round…";
+    sub = "the misses are listed below — go get them.";
+  } else {
+    cls = "sad";
+    face = ANGRY_SVG;
+    head = "Yikes.";
+    sub = "retry the misses before she finds you.";
+  }
+  ov.className = "overlay " + cls + " show" + (face === ANGRY_SVG ? " trap-flash" : "");
+  panel.innerHTML =
+    banner +
+    '<div class="char-wrap">' + face +
+    '<div class="bubble">' + head + '<small>' + sub + '</small></div></div>' +
+    '<p class="detail">Score <b>' + state.score + '</b> · ' + state.right + '/' + total +
+    ' right · best streak ' + state.best + ' · traps walked into: ' + state.trapHits + '</p>' +
+    (state.missed.length
+      ? '<div class="miss-list"><span>Study these ' + state.missed.length + ':</span>' +
+        state.missed.map(function (w) { return '<div><b>Q:</b> ' + escapeHtml(w.word) + '<br><b>A:</b> ' + escapeHtml(w.definition) + '</div>'; }).join('') + '</div>' +
+        '<button id="retryBtn" type="button">Retry missed (' + state.missed.length + ')</button>'
+      : '<p class="detail">Flawless — nothing to review!</p>') +
+    '<button id="nextBtn" type="button">Play again</button>';
+  if (cls === "happy") addSparkles(panel, banner ? 60 : 30); else addTears(panel, true);
+  if ($("retryBtn")) $("retryBtn").addEventListener("click", retryMissed);
+  $("nextBtn").addEventListener("click", function () { startGame(state.filter); });
+  kickAnimation(ov);
+  $("bar").style.width = "100%";
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  $("weekFilter").addEventListener("change", function (e) { startGame(e.target.value); });
+  /* study buddy watches the cursor and hops on click */
+  (function () {
+    const buddy = document.getElementById("buddy");
+    if (!buddy || typeof buddy.getBoundingClientRect !== "function") return;
+    const pupils = document.getElementById("buddyPupils");
+    const bhead = document.getElementById("buddyHead");
+    const calmMotion = (typeof window !== "undefined") && !!window.matchMedia &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (calmMotion) return;
+    let mx = (typeof innerWidth !== "undefined") ? innerWidth / 2 : 0;
+    let my = 0, ticking = false;
+    function buddyLook() {
+      ticking = false;
+      const r = buddy.getBoundingClientRect();
+      const dx = mx - (r.left + r.width / 2), dy = my - (r.top + r.height / 2);
+      const d = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+      const px = (dx / d) * Math.min(4, d / 40), py = (dy / d) * Math.min(4, d / 40);
+      if (pupils) pupils.setAttribute("transform", "translate(" + px.toFixed(1) + "," + py.toFixed(1) + ")");
+      if (bhead) bhead.setAttribute("transform", "rotate(" + (Math.max(-6, Math.min(6, dx / 60))).toFixed(1) + " 60 55)");
+    }
+    document.addEventListener("mousemove", function (e) {
+      mx = e.clientX; my = e.clientY;
+      if (!ticking) { ticking = true; requestAnimationFrame(buddyLook); }
+    });
+    document.addEventListener("click", function () {
+      buddy.classList.remove("hop");
+      void buddy.offsetWidth;
+      buddy.classList.add("hop");
+    });
+  })();
+  $("countSelect").addEventListener("change", function (e) { state.count = e.target.value; startGame(state.filter); });
+  $("restartBtn").addEventListener("click", function () { startGame(state.filter); });
+  $("soundBtn").addEventListener("click", function (e) {
+    soundOn = !soundOn;
+    e.target.textContent = soundOn ? "Sound: on" : "Sound: off";
+    if (!soundOn) killAudio();
+  });
+  $("musicBtn").addEventListener("click", function (e) {
+    musicOn = !musicOn;
+    e.target.textContent = musicOn ? "Music: on" : "Music: off";
+    if (musicOn) startMusic(); else killAudio();
+  });
+  document.addEventListener("pointerdown", function bootMusic() {
+    document.removeEventListener("pointerdown", bootMusic);
+    startMusic();
+  });
+  startGame("all");
+});
+
+globalThis.__historyTrivia = { state: state, buildOptions: buildOptions, answer: answer, nextQuestion: nextQuestion, startGame: startGame };
+</script>
+</body>
+</html>
